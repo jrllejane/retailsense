@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.pdb
+*.egg-info/
+.venv/
+venv/
+ENV/
+.env
+.env.*
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Node.js
+node_modules/
+build/
+dist/
+.npm/
+.yarn/
+
+# React
+*.log
+*.lock
+*.cache
+
+# OS
+.DS_Store
+Thumbs.db
+
+# VSCode/IDE
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Project-specific
+IT332-RetailSense/backend/.venv/
+IT332-RetailSense/backend/ENV/
+IT332-RetailSense/frontend/node_modules/
+IT332-RetailSense/frontend/dist/
+IT332-RetailSense/frontend/build/
+IT332-RetailSense/frontend/.env
+IT332-RetailSense/frontend/.env.*
+IT332-RetailSense/backend/.env
+IT332-RetailSense/backend/.env.*
+
+# Uploads/Results
+IT332-RetailSense/project_results/
+IT332-RetailSense/project_uploads/
+IT332-RetailSense/testing/
+IT332-RetailSense/Images/
+IT332-RetailSense/Points/
+IT332-RetailSense/videos/ 
