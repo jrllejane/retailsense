@@ -1,0 +1,22 @@
+<!-- public/index.html or similar -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redirecting...</title>
+    <!-- This page can be minimal as Flask's '/' route will handle redirection -->
+</head>
+<body>
+    <p>Loading application...</p>
+
+    <script>
+        // This script is just for demonstration if you keep index.html
+        // The Flask '/' route now handles redirection more cleanly.
+        // If you want client-side check:
+        // You could fetch a '/api/check_auth' endpoint here.
+        // For now, we rely on Flask to redirect from '/'
+        window.location.href = '/'; // Will be handled by Flask's / route
+    </script>
+</body>
+</html>

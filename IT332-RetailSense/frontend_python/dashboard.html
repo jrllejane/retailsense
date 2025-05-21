@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Heatmap Generator</title>
+    <style>
+        body { font-family: sans-serif; margin: 0; display: flex; flex-direction: column; min-height: 100vh; }
+        header { background-color: #007bff; color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
+        header h1 { margin: 0; font-size: 1.5em; cursor: pointer; }
+        header button { background-color: #dc3545; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; }
+        header button:hover { background-color: #c82333; }
+        nav { background-color: #f8f9fa; padding: 10px 20px; border-bottom: 1px solid #dee2e6; }
+        nav button.main-nav-button { background-color: transparent; border: none; padding: 10px 15px; cursor: pointer; font-size: 1.1em; margin-right: 10px;}
+        nav button:disabled { color: #ccc; cursor: not-allowed; }
+        nav button.active { font-weight: bold; border-bottom: 2px solid #007bff; }
+        .page-section { display: none; /* Main page sections, hidden by default */ }
+        .page-section.active { display: block; /* Show active page section */ }
+        .content-section { display: none; /* Sub-sections within a page, hidden by default */ }
+        .content-section.active { display: block; /* Show active sub-section */ }
+        .container { flex-grow: 1; max-width: 800px; margin: 20px auto; padding: 20px; border-radius: 8px; }
+        label { display: block; margin-top: 10px; }
+        input[type="file"], button[type="submit"], .action-button { margin-top: 5px; padding: 8px 15px; border-radius: 4px; border: 1px solid #007bff; background-color: #007bff; color:white; cursor:pointer;}
+        input[type="file"] { border: 1px solid #ccc; background-color: white; color: black; }
+        button:disabled { background-color: #ccc; border-color: #ccc; cursor: not-allowed;}
+        #status, #results { margin-top: 20px; padding: 10px; border: 1px solid #eee; }
+        #heatmapImage { max-width: 100%; height: auto; margin-top: 10px; }
+        #pointMakerCanvas { border:1px solid #000; cursor:crosshair; max-width: 100%; height: auto; }
+        /* Progress Bar Styles */
+        .progress-bar-container {
+            width: 100%;
+            background-color: #e0e0e0;
+            border-radius: 4px;
+            margin-top: 8px;
+            height: 22px;
+            overflow: hidden; /* Ensures inner bar corners are also rounded */
+        }
+        .progress-bar-fill {
+            height: 100%;
+            width: 0%; /* Initial width */
+            background-color: #007bff;
+            border-radius: 4px; /* Match container for smooth look */
+            text-align: center;
+            line-height: 22px; /* Vertically center text */
+            color: white;
+            font-size: 0.9em;
+            transition: width 0.4s ease; /* Smooth transition for width changes */
+            white-space: nowrap; /* Prevent text wrapping */
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 id="dashboardTitle">RetailSense Dashboard</h1>
+        <button id="logoutButton">Logout</button>
+    </header>
+
+    <nav>
+        <button id="navProcessVideo" class="main-nav-button">Process Video</button>
+        <button id="navConfigureFloorplan" class="main-nav-button">Configure Floorplan</button>
+        <button id="navHistory" class="main-nav-button">History</button>
+    </nav>
+
+    <div class="container">
+        <!-- Page for Processing Video -->
+        <section id="pageProcessVideo" class="page-section">
+            <h2>Process Video for Heatmap</h2>
+            <div id="loadedConfigInfo" style="padding: 10px; background-color: #e9ecef; border-radius: 4px; margin-bottom:15px;">
+                <p><strong>Loaded Point Configuration:</strong> <span id="loadedFloorplanName">None</span></p>
+                <p>Points Status: <span id="loadedPointsStatus">Not Set</span></p>
+                <small>If a point configuration is loaded from "Configure Floorplan", those points will be used with the floorplan you select below. Otherwise, you must set points in "Configure Floorplan" first.</small>
+            </div>
+            <p>Upload your video file. The floorplan and points you configured will be used.</p>
+            <form id="heatmapForm">
+                <div>
+                    <label for="processVideo_floorplanFile">Floorplan Image File (PNG, JPG):</label>
+                    <input type="file" id="processVideo_floorplanFile" name="floorplanFile" accept=".png,.jpg,.jpeg" required>
+                </div>
+                <div>
+                    <label for="processVideo_videoFile">Video File (MP4, AVI):</label>
+                    <input type="file" id="processVideo_videoFile" name="videoFile" accept=".mp4,.avi,.mov" required>
+                </div>
+                <button type="submit" style="margin-top:10px;" id="generateHeatmapButton">Generate Heatmap</button>
+            </form>
+            <div id="status">
+                <p><span id="statusText">Status: Idle</span></p> <!-- Loader will be appended here by JS -->
+            </div>
+            <div id="results" style="display:none;">
+                <h2>Results</h2>
+                <h3>Heatmap Image:</h3>
+                <img id="heatmapImage" src="" alt="Generated Heatmap">
+                <h3>Processed Video:</h3>
+                <a id="videoLink" href="#" download>Download Processed Video</a>
+            </div>
+        </section>
+
+        <!-- Page for Configuring Floorplan -->
+        <section id="pageConfigureFloorplan" class="page-section">
+            <h2>Configure Floorplan and Points</h2>
+            <div class="content-section active" id="configStep1Upload"> <!-- Initially show upload -->
+                <h3>Step 1: Upload Floorplan Image</h3>
+                <p>Upload the floorplan image you want to use for the heatmap.</p>
+                <div>
+                    <label for="configPage_floorplanUploadFile">Floorplan Image (PNG, JPG):</label>
+                    <input type="file" id="configPage_floorplanUploadFile" accept=".png,.jpg,.jpeg">
+                </div>
+                <div id="floorplanPreviewContainer" style="margin-top:20px; display:none;">
+                    <h4>Floorplan Preview:</h4>
+                    <img id="floorplanPreviewImage" src="#" alt="Floorplan Preview" style="max-width:100%; max-height:300px; border:1px solid #ccc;"/>
+                </div>
+                <button id="goToPointConfigButton" class="action-button" style="margin-top:10px;" disabled>Next: Configure Points</button>
+            </div>
+
+            <div class="content-section" id="configStep2Points"> <!-- Hidden initially -->
+                <h3>Step 2: Configure Points</h3>
+                <p>Click on the floorplan to select 4 points: Top-Left, Top-Right, Bottom-Right, Bottom-Left of the camera's view on the floorplan.</p>
+                <canvas id="pointMakerCanvas"></canvas>
+                <div id="pointsCoordinates" style="margin-top:10px;">
+                    <p>Selected Points (up to 4):</p>
+                    <ul id="pointsList"></ul>
+                </div>
+                <button id="resetPointsButton" class="action-button">Reset Points</button>
+                <button id="saveConfigurationButton" class="action-button" style="margin-top:10px;" disabled>Save This Point Configuration</button>
+            </div>
+        </section>
+
+        <!-- Page for History (Placeholder) -->
+        <section id="pageHistory" class="page-section">
+            <h2>Processing History</h2>
+            <table id="historyTable" style="width:100%; border-collapse: collapse; margin-top:15px;">
+                <thead>
+                    <tr style="background-color:#f2f2f2; text-align:left;"><th style="padding:8px;">Job ID</th><th style="padding:8px;">Video</th><th style="padding:8px;">Floorplan</th><th style="padding:8px;">People</th><th style="padding:8px;">Status</th><th style="padding:8px;">Message</th><th style="padding:8px;">Created</th><th style="padding:8px;">Actions</th></tr>
+                </thead>
+                <tbody id="historyTableBody"></tbody>
+            </table>
+            <p id="historyMessage" style="text-align:center; margin-top:10px;"></p>
+        </section>
+    </div>
+
+    <script>
+        const backendUrl = 'http://127.0.0.1:5000';
+
+        // DOM Elements
+        const dashboardTitle = document.getElementById('dashboardTitle');
+        const logoutButton = document.getElementById('logoutButton');
+        const mainNavButtons = document.querySelectorAll('.main-nav-button');
+        const pageSections = document.querySelectorAll('.page-section');
+
+        // Elements for Configure Floorplan Page
+        const configPage_floorplanUploadFile = document.getElementById('configPage_floorplanUploadFile');
+        const floorplanPreviewContainer = document.getElementById('floorplanPreviewContainer');
+        const floorplanPreviewImage = document.getElementById('floorplanPreviewImage');
+        const goToPointConfigButton = document.getElementById('goToPointConfigButton');
+        const pointMakerCanvas = document.getElementById('pointMakerCanvas');
+        const pointsList = document.getElementById('pointsList');
+        const resetPointsButton = document.getElementById('resetPointsButton');
+        const saveConfigurationButton = document.getElementById('saveConfigurationButton');
+        const ctx = pointMakerCanvas.getContext('2d');
+
+        // Elements for Process Video Page
+        const loadedConfigInfo = document.getElementById('loadedConfigInfo');
+        const loadedFloorplanNameSpan = document.getElementById('loadedFloorplanName');
+        const loadedPointsStatusSpan = document.getElementById('loadedPointsStatus');
+        const heatmapForm = document.getElementById('heatmapForm');
+        const processVideo_floorplanFile = document.getElementById('processVideo_floorplanFile');
+        const processVideo_videoFile = document.getElementById('processVideo_videoFile');
+        const generateHeatmapButton = document.getElementById('generateHeatmapButton');
+        const statusTextSpan = document.getElementById('statusText');
+        const statusDiv = document.getElementById('status');
+        const resultsDiv = document.getElementById('results');
+        const heatmapImageElem = document.getElementById('heatmapImage');
+        const videoLinkElem = document.getElementById('videoLink');
+
+        // Client-side state for active configuration
+        let selectedFloorplanImage = null; // This will be an Image object for canvas in Configure page
+        let currentConfigPoints = []; // Points being configured on the Configure page {originalX, originalY}
+        let originalFloorplanWidth = 0;
+        let originalFloorplanHeight = 0;
+        let currentJobId = null;
+
+        // --- Navigation Logic ---
+        function showPage(pageId) {
+            pageSections.forEach(section => {
+                section.classList.remove('active');
+                if (section.id === pageId) {
+                    section.classList.add('active');
+                }
+            });
+            mainNavButtons.forEach(button => {
+                button.classList.remove('active');
+                if (button.id === `nav${pageId.replace('page', '')}`) {
+                    button.classList.add('active');
+                }
+            });
+            loadAndDisplaySavedConfigInfo(); // Update display when navigating
+        }
+
+        function showConfigStep(stepId) {
+            document.querySelectorAll('#pageConfigureFloorplan .content-section').forEach(s => s.classList.remove('active'));
+            document.getElementById(stepId).classList.add('active');
+        }
+
+        dashboardTitle.addEventListener('click', () => showPage('pageProcessVideo'));
+
+        mainNavButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                if (button.disabled) return;
+                const targetPageId = `page${button.id.replace('nav', '')}`;
+                showPage(targetPageId);
+                if (targetPageId === 'pageConfigureFloorplan') {
+                    showConfigStep('configStep1Upload');
+                    loadConfigIntoPointMaker(); // Attempt to load saved config into canvas
+                } else if (targetPageId === 'pageHistory') {
+                    fetchJobHistory();
+                }
+            });
+        });
+
+        logoutButton.addEventListener('click', async () => {
+            try {
+                await fetch(`${backendUrl}/api/logout`, { method: 'POST' });
+                window.location.href = '/login';
+            } catch (error) {
+                console.error('Logout error:', error);
+                alert('Logout failed. Please try again.');
+            }
+        });
+
+        function loadAndDisplaySavedConfigInfo() {
+            const savedName = localStorage.getItem('savedConfigName');
+            const savedPointsStr = localStorage.getItem('savedConfigPoints');
+            if (savedName) {
+                loadedFloorplanNameSpan.textContent = savedName;
+                if (savedPointsStr) {
+                    const points = JSON.parse(savedPointsStr);
+                    loadedPointsStatusSpan.textContent = points.length === 4 ? `${points.length} points set.` : "Points not fully set.";
+                } else {
+                    loadedPointsStatusSpan.textContent = "Points not set.";
+                }
+            } else {
+                loadedFloorplanNameSpan.textContent = 'None';
+                loadedPointsStatusSpan.textContent = "Not Set.";
+            }
+        }
+
+        // --- Configure Floorplan Page Logic ---
+        configPage_floorplanUploadFile.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    floorplanPreviewImage.src = e.target.result;
+                    floorplanPreviewContainer.style.display = 'block';
+                    
+                    selectedFloorplanImage = new Image();
+                    selectedFloorplanImage.onload = () => {
+                        originalFloorplanWidth = selectedFloorplanImage.naturalWidth;
+                        originalFloorplanHeight = selectedFloorplanImage.naturalHeight;
+                        console.log("Floorplan image loaded for config. Original dims:", originalFloorplanWidth, "x", originalFloorplanHeight);
+                        goToPointConfigButton.disabled = false;
+                        currentConfigPoints = []; 
+                        updatePointsListDisplay();
+                        saveConfigurationButton.disabled = true;
+                    };
+                    selectedFloorplanImage.onerror = () => {
+                        alert("Error loading floorplan image for preview. Please try a different file.");
+                        selectedFloorplanImage = null;
+                        floorplanPreviewContainer.style.display = 'none';
+                        goToPointConfigButton.disabled = true;
+                    };
+                    selectedFloorplanImage.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            } else {
+                 selectedFloorplanImage = null;
+                 floorplanPreviewContainer.style.display = 'none';
+                 goToPointConfigButton.disabled = true;
+            }
+        });
+
+        goToPointConfigButton.addEventListener('click', () => {
+            if (!selectedFloorplanImage || !selectedFloorplanImage.complete || selectedFloorplanImage.naturalWidth === 0) {
+                alert("Please upload and wait for the floorplan image to load first.");
+                return;
+            }
+            showConfigStep('configStep2Points');
+            initializePointMaker();
+        });
+
+        function initializePointMaker() {
+            if (!selectedFloorplanImage || !selectedFloorplanImage.complete || selectedFloorplanImage.naturalWidth === 0) {
+                console.error("Floorplan image not ready for PointMaker.");
+                return;
+            }
+            
+            const containerWidth = pointMakerCanvas.parentElement.clientWidth * 0.95; 
+            const aspectRatio = originalFloorplanWidth / originalFloorplanHeight;
+            
+            let canvasWidth = originalFloorplanWidth;
+            let canvasHeight = originalFloorplanHeight;
+
+            if (canvasWidth > containerWidth) {
+                canvasWidth = containerWidth;
+                canvasHeight = canvasWidth / aspectRatio;
+            }
+            
+            pointMakerCanvas.width = canvasWidth;
+            pointMakerCanvas.height = canvasHeight;
+            
+            ctx.clearRect(0, 0, pointMakerCanvas.width, pointMakerCanvas.height); 
+            ctx.drawImage(selectedFloorplanImage, 0, 0, pointMakerCanvas.width, pointMakerCanvas.height);
+            
+            currentConfigPoints.forEach(p => {
+                const displayX = (p.originalX / originalFloorplanWidth) * pointMakerCanvas.width;
+                const displayY = (p.originalY / originalFloorplanHeight) * pointMakerCanvas.height;
+                drawPointOnCanvas(displayX, displayY);
+            });
+            updatePointsListDisplay(); 
+            saveConfigurationButton.disabled = currentConfigPoints.length !== 4;
+        }
+
+        pointMakerCanvas.addEventListener('click', (event) => {
+            if (!selectedFloorplanImage) return;
+            if (currentConfigPoints.length >= 4) {
+                alert("You have already selected 4 points. Reset if you want to change them.");
+                return;
+            }
+            const rect = pointMakerCanvas.getBoundingClientRect();
+            const canvasX = event.clientX - rect.left;
+            const canvasY = event.clientY - rect.top;
+
+            const originalX = (canvasX / pointMakerCanvas.width) * originalFloorplanWidth;
+            const originalY = (canvasY / pointMakerCanvas.height) * originalFloorplanHeight;
+
+            currentConfigPoints.push({ x: canvasX, y: canvasY, originalX: originalX, originalY: originalY });
+            drawPointOnCanvas(canvasX, canvasY);
+            updatePointsListDisplay();
+
+            if (currentConfigPoints.length === 4) {
+                saveConfigurationButton.disabled = false;
+            }
+        });
+
+        function drawPointOnCanvas(x, y) {
+            ctx.fillStyle = 'red';
+            ctx.beginPath();
+            ctx.arc(x, y, 5, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+        function updatePointsListDisplay() {
+            pointsList.innerHTML = '';
+            currentConfigPoints.forEach((point, index) => {
+                const li = document.createElement('li');
+                li.textContent = `Point ${index + 1}: (Original: ${point.originalX.toFixed(0)}, ${point.originalY.toFixed(0)})`;
+                pointsList.appendChild(li);
+            });
+        }
+
+        resetPointsButton.addEventListener('click', () => {
+            currentConfigPoints = []; 
+            initializePointMaker(); 
+            saveConfigurationButton.disabled = true;
+        });
+
+        saveConfigurationButton.addEventListener('click', () => {
+            if (currentConfigPoints.length !== 4) {
+                alert("Please select exactly 4 points.");
+                return;
+            }
+            if (!configPage_floorplanUploadFile.files[0] && !localStorage.getItem('savedConfigName')) {
+                alert("Floorplan file is missing. Please upload one in Step 1 of Configuration.");
+                showConfigStep('configStep1Upload');
+                return;
+            }
+            
+            const floorplanFileToSaveName = configPage_floorplanUploadFile.files[0] ? configPage_floorplanUploadFile.files[0].name : localStorage.getItem('savedConfigName');
+            const floorplanDataURLToSave = selectedFloorplanImage.src; 
+
+            localStorage.setItem('savedConfigName', floorplanFileToSaveName);
+            localStorage.setItem('savedConfigDataURL', floorplanDataURLToSave);
+            localStorage.setItem('savedConfigPoints', JSON.stringify(currentConfigPoints));
+
+            alert(`Configuration for "${floorplanFileToSaveName}" with ${currentConfigPoints.length} points saved to browser memory.`);
+            loadAndDisplaySavedConfigInfo(); 
+        });
+
+        window.addEventListener('resize', () => {
+            if (document.getElementById('pageConfigureFloorplan').classList.contains('active') && 
+                document.getElementById('configStep2Points').classList.contains('active') && 
+                selectedFloorplanImage) {
+                initializePointMaker();
+            }
+        });
+
+        // --- Process Video Page Logic ---
+        heatmapForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            statusTextSpan.textContent = 'Status: Uploading files...';
+            resultsDiv.style.display = 'none';
+            heatmapImageElem.src = '';
+            videoLinkElem.href = '#';
+
+            const pointsToUseStr = localStorage.getItem('savedConfigPoints');
+            let pointsToUse = [];
+            if (pointsToUseStr) {
+                pointsToUse = JSON.parse(pointsToUseStr);
+            }
+
+            if (pointsToUse.length !== 4) {
+                alert("No valid 4-point configuration found. Please set one up in 'Configure Floorplan' and save it.");
+                return;
+            }
+            if (processVideo_videoFile.files.length === 0) {
+                alert("Please select a video file.");
+                return;
+            }
+            if (processVideo_floorplanFile.files.length === 0) {
+                alert("Please select a floorplan image file for processing.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('videoFile', processVideo_videoFile.files[0]);
+            formData.append('floorplanFile', processVideo_floorplanFile.files[0]);
+
+            const pointsDataForBackend = pointsToUse.map(p => `${p.originalX.toFixed(0)},${p.originalY.toFixed(0)}`).join('\n');
+            formData.append('pointsData', pointsDataForBackend);
+
+            try {
+                const response = await fetch(`${backendUrl}/api/heatmap_jobs`, {
+                    method: 'POST',
+                    body: formData,
+                });
+                if (response.status === 401) {
+                    alert("Session expired or not logged in. Redirecting to login.");
+                    window.location.href = '/login';
+                    return;
+                }
+                const data = await response.json();
+                if (response.ok && data.job_id) {
+                    currentJobId = data.job_id;
+                    document.getElementById('statusText').textContent = `Status: Processing... (Job ID: ${currentJobId})`;
+                    pollJobStatus(currentJobId);
+                } else {
+                    document.getElementById('statusText').textContent = `Status: Error - ${data.error || 'Submission failed'}`;
+                }
+            } catch (error) {
+                console.error('Error submitting job:', error);
+                document.getElementById('statusText').textContent = `Status: Error - Could not connect to server.`;
+            }
+        });
+
+        async function pollJobStatus(jobId) {
+            try {
+                const response = await fetch(`${backendUrl}/api/heatmap_jobs/${jobId}/status`);
+                const data = await response.json();
+
+                if (response.status === 401) {
+                    alert("Session expired or not logged in. Redirecting to login.");
+                    window.location.href = '/login';
+                    return;
+                }
+                if (!response.ok) {
+                    document.getElementById('statusText').textContent = `Status: Error checking status - ${data.error || 'Unknown error'}`;
+                    const progressBarContainer = statusDiv.querySelector('.progress-bar-container');
+                    if(progressBarContainer) progressBarContainer.remove();
+                    return;
+                }
+
+                let statusMessageText = `Status: ${data.status} (Job ID: ${jobId})`;
+                if (data.message) {
+                    statusMessageText += ` - ${data.message}`;
+                }
+                document.getElementById('statusText').textContent = statusMessageText;
+
+                const progressBarFill = document.getElementById('progressBarFill');
+                const progressBarContainer = statusDiv.querySelector('.progress-bar-container');
+
+                if (data.status === 'processing' || data.status === 'pending') {
+                    if (!progressBarContainer) { // If somehow removed, recreate
+                        statusDiv.insertAdjacentHTML('beforeend', '<div class="progress-bar-container"><div class="progress-bar-fill" id="progressBarFill">0%</div></div>');
+                    }
+                    const progressBarFillElem = document.getElementById('progressBarFill'); // Re-query in case it was recreated
+
+                    // Try to parse percentage from message
+                    const progressMatch = data.message ? data.message.match(/\((\d+)%\)/) : null;
+                    if (progressMatch && progressBarFillElem) {
+                        const percentage = progressMatch[1];
+                        progressBarFillElem.style.width = percentage + '%';
+                        progressBarFillElem.textContent = percentage + '%';
+                    } else if (progressBarFillElem) {
+                        // If no percentage, show a minimal progress or keep current
+                        // For an indeterminate feel, you could animate the bar with CSS if width is small
+                        // progressBarFillElem.style.width = '5%'; // Example for non-percentage updates
+                        // progressBarFillElem.textContent = '';
+                    }
+                    setTimeout(() => pollJobStatus(jobId), 2000); // Poll a bit faster: 2 seconds
+                } else { // Completed or Error
+                    if (progressBarFill && data.status === 'completed') { // Show 100% on completion
+                        progressBarFill.style.width = '100%';
+                        progressBarFill.textContent = '100%';
+                    }
+                    // Remove progress bar after a short delay to see 100% or error state
+                    setTimeout(() => {
+                        if(progressBarContainer) progressBarContainer.remove();
+                    }, 1500);
+                }
+
+                if (data.status === 'completed') {
+                    resultsDiv.style.display = 'block';
+                    heatmapImageElem.src = `${backendUrl}/api/heatmap_jobs/${jobId}/result/image?t=${new Date().getTime()}`;
+                    videoLinkElem.href = `${backendUrl}/api/heatmap_jobs/${jobId}/result/video`;
+                    videoLinkElem.download = `processed_video_${jobId}.mp4`;
+                } else if (data.status === 'processing' || data.status === 'pending') {
+                    // Still processing, do nothing
+                } else if (data.status === 'error') {
+                    // Error message is already displayed
+                }
+
+            } catch (error) {
+                console.error('Error polling status:', error);
+                document.getElementById('statusText').textContent = `Status: Error - Could not get job status.`;
+            }
+        }
+
+        // --- History Page Logic ---
+        async function fetchJobHistory() {
+            const tableBody = document.getElementById('historyTableBody');
+            const historyMessage = document.getElementById('historyMessage');
+            tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:10px;">Loading history...</td></tr>'; // Updated colspan
+            historyMessage.textContent = '';
+
+            try {
+                const response = await fetch(`${backendUrl}/api/heatmap_jobs/history`);
+                if (response.status === 401) {
+                    alert("Session expired. Redirecting to login.");
+                    window.location.href = '/login';
+                    return;
+                }
+                if (!response.ok) {
+                    historyMessage.textContent = 'Error fetching history.';
+                    tableBody.innerHTML = '';
+                    return;
+                }
+                const jobs = await response.json();
+                tableBody.innerHTML = ''; // Clear loading message
+                if (jobs.length === 0) {
+                    historyMessage.textContent = 'No processing history found.';
+                } else {
+                    jobs.forEach(job => {
+                        const row = tableBody.insertRow();
+                        row.insertCell().textContent = job.job_id.substring(0, 8) + "...";
+                        row.insertCell().textContent = job.input_video_name || 'N/A';
+                        row.insertCell().textContent = job.input_floorplan_name || 'N/A';
+                        row.insertCell().textContent = job.people_counted !== null ? job.people_counted : 'N/A';
+                        row.insertCell().textContent = job.status;
+                        row.insertCell().textContent = job.message || 'N/A';
+                        row.insertCell().textContent = new Date(job.created_at).toLocaleString();
+                        const actionsCell = row.insertCell();
+                        if (job.status === 'completed') {
+                            actionsCell.innerHTML = `<a href="${backendUrl}/api/heatmap_jobs/${job.job_id}/result/image" target="_blank">View Image</a> | <a href="${backendUrl}/api/heatmap_jobs/${job.job_id}/result/video">Download Video</a>`;
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error("Error fetching history:", error);
+                historyMessage.textContent = 'Failed to load history due to a network or server error.';
+                tableBody.innerHTML = '';
+            }
+        }
+
+        function loadConfigIntoPointMaker() {
+            const savedDataURL = localStorage.getItem('savedConfigDataURL');
+            const savedPointsStr = localStorage.getItem('savedConfigPoints');
+
+            if (savedDataURL) {
+                selectedFloorplanImage = new Image();
+                selectedFloorplanImage.onload = () => {
+                    originalFloorplanWidth = selectedFloorplanImage.naturalWidth;
+                    originalFloorplanHeight = selectedFloorplanImage.naturalHeight;
+                    if (savedPointsStr) {
+                        currentConfigPoints = JSON.parse(savedPointsStr);
+                    } else {
+                        currentConfigPoints = [];
+                    }
+                    floorplanPreviewImage.src = savedDataURL;
+                    floorplanPreviewContainer.style.display = 'block';
+                    goToPointConfigButton.disabled = false;
+
+                    if (document.getElementById('pageConfigureFloorplan').classList.contains('active') && 
+                        document.getElementById('configStep2Points').classList.contains('active')) {
+                        initializePointMaker();
+                    }
+                };
+                selectedFloorplanImage.src = savedDataURL;
+            } else {
+                selectedFloorplanImage = null;
+                currentConfigPoints = [];
+                floorplanPreviewContainer.style.display = 'none';
+                goToPointConfigButton.disabled = true;
+                if (document.getElementById('pageConfigureFloorplan').classList.contains('active') && 
+                    document.getElementById('configStep2Points').classList.contains('active')) {
+                    if(ctx && pointMakerCanvas.width > 0 && pointMakerCanvas.height > 0) { // Check if canvas is initialized
+                        ctx.clearRect(0,0, pointMakerCanvas.width, pointMakerCanvas.height);
+                    }
+                    updatePointsListDisplay();
+                }
+            }
+        }
+
+        // --- Initial Setup ---
+        showPage('pageProcessVideo'); 
+        loadAndDisplaySavedConfigInfo(); 
+    </script>
+</body>
+</html>
